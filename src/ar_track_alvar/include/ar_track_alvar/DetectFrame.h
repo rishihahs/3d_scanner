@@ -19,9 +19,11 @@ public:
     DetectFrame(double marker_size_) :
         marker_size(marker_size_),
         // Xtion intrinsics 535.2900990271, 0.0000000000, 320.0000000000, 0, 0, 535.2900990271, 240.0000000000, 0, 0, 0, 1, 0
-        cam(535.2900990271, 535.2900990271, 320.0000000000, 240.0000000000, 640., 480.) {}	
+        cam(535.2900990271, 535.2900990271, 320.0000000000, 240.0000000000, 640., 480.) {
+            marker_detector.SetMarkerSize(marker_size, marker_resolution, marker_margin);
+        }	
 
-    Eigen::Affine3f detectARTag(const cv::Mat &image, bool *success);	
+    Eigen::Affine3f detectARTag(const cv::Mat &image, const cv::Mat &ar_tag, bool *success);	
 
 private:
     Camera cam;

@@ -22,6 +22,8 @@ Matrix<float, 4, Dynamic> PointCloudReconstructor::reconstruct(
   //cv::undistort(depthImageDistorted, depthImage, intrinsics, distortion);
   Mat depthImage = depthImageDistorted;
 
+  float sx = ir_intrinsics_(0, 0);
+  float sy = ir_intrinsics_(1, 1);
   float x_c = ir_intrinsics_(0, 2);
   float y_c = ir_intrinsics_(1, 2);
 
@@ -39,9 +41,9 @@ Matrix<float, 4, Dynamic> PointCloudReconstructor::reconstruct(
       // Analytic solution to intrinsics^-1(point) * depth
       // Eigen is column major order, so *4 is column size
       pointsData[(depthImage.rows*y + x)*4 + 0] =
-        (x - x_c) * (1.0 / ir_intrinsics_(0, 0)) * (row[x] / 1000.0f);
+        (x - x_c) * (1.0 / sx) * (row[x] / 1000.0f);
       pointsData[(depthImage.rows*y + x)*4 + 1] =
-        (y - y_c) * (1.0 / ir_intrinsics_(1, 1)) * (row[x] / 1000.0f);
+        (y - y_c) * (1.0 / sy) * (row[x] / 1000.0f);
 
       pointsData[(depthImage.rows*y + x)*4 + 2] = row[x] / 1000.0f;
       pointsData[(depthImage.rows*y + x)*4 + 3] = 1.0f;
@@ -52,15 +54,17 @@ Matrix<float, 4, Dynamic> PointCloudReconstructor::reconstruct(
   //return cloud;
 }
 
-pcl::PointCloud<pcl::PointXYZRGB>::Ptr PointCloudReconstructor::register_depth(const Mat &rgbImage, const Matrix<float, 4, Dynamic> &reconstructedCloud, int width, int height) {
-    //Matrix<float, 4, Dynamic> cloudInRGB = extrinsics_.inverse() * reconstructedCloud;
-    Matrix<float, 4, Dynamic> cloudInRGB = reconstructedCloud;
+pcl::PointCloud<pcl::PointXYZRGB>::Ptr PointCloudReconstructor::register_depth(const Mat &rgbImage, const Matrix<float, 4, Dynamic> &reconstructedCloud, int width, int height, const Eigen::Affine3f &transformation) {
+    Matrix<float, 4, Dynamic> cloudInRGB = extrinsics_.inverse() * reconstructedCloud;
+    //Matrix<float, 4, Dynamic> cloudInRGB = reconstructedCloud;
     Matrix<float, 3, Dynamic> pixelCorresp = rgb_intrinsics_ * cloudInRGB;
+    Matrix<float, 4, Dynamic> cloudTransformed = transformation * cloudInRGB;
 
     // Raw data pointer for greater efficiency
     const float *reconCloudData = reconstructedCloud.data();
     const float *cloudInRGBData = cloudInRGB.data();
     const float *pixelCorrespData = pixelCorresp.data();
+    const float *cloudTransformedData = cloudTransformed.data();
 
 
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>());
@@ -71,32 +75,28 @@ pcl::PointCloud<pcl::PointXYZRGB>::Ptr PointCloudReconstructor::register_depth(c
 
     pcl::PointXYZRGB *pclCloud = &cloud->points[0];
     for (int i = 0; i < cloudInRGB.cols(); ++i) {
-        if (reconCloudData[i*4 + 2] != 0.) {
-            pclCloud[i].x = cloudInRGBData[i*4 + 0];
-            pclCloud[i].y = cloudInRGBData[i*4 + 1];
-            pclCloud[i].z = cloudInRGBData[i*4 + 2];
+        float tfx = cloudTransformedData[i*4 + 0] / cloudTransformedData[i*4 + 3];
+        float tfy = cloudTransformedData[i*4 + 1] / cloudTransformedData[i*4 + 3];
+        float tfz = cloudTransformedData[i*4 + 2] / cloudTransformedData[i*4 + 3];
 
+        float dist = tfx*tfx + tfy*tfy + tfz*tfz;
+        if (reconCloudData[i*4 + 2] != 0. && dist <= 4.) {
             int x_pixel = (int) (pixelCorrespData[i*3 + 0] / pixelCorrespData[i*3 + 2]);
             int y_pixel = (int) (pixelCorrespData[i*3 + 1] / pixelCorrespData[i*3 + 2]);
-            if(
+            if (
                 (x_pixel >= 0) && (x_pixel <= width) &&
                 (y_pixel >= 0) && (y_pixel <= height)
               ) {
-              Vec3b color = rgbImage.at<Vec3b>(y_pixel, x_pixel);
-              pclCloud[i].b = color[0];
-              pclCloud[i].g = color[1];
-              pclCloud[i].r = color[2];
-            } else {
-              /*pclCloud[i].x = std::numeric_limits<float>::quiet_NaN();
-              pclCloud[i].y = std::numeric_limits<float>::quiet_NaN();
-              pclCloud[i].z = std::numeric_limits<float>::quiet_NaN();
-              pclCloud[i].rgb = 0;*/
+
+                pclCloud[i].x = tfx;
+                pclCloud[i].y = tfy;
+                pclCloud[i].z = tfz;
+
+                Vec3b color = rgbImage.at<Vec3b>(y_pixel, x_pixel);
+                pclCloud[i].b = color[0];
+                pclCloud[i].g = color[1];
+                pclCloud[i].r = color[2];
             }
-        } else {
-            /*pclCloud[i].x = std::numeric_limits<float>::quiet_NaN();
-            pclCloud[i].y = std::numeric_limits<float>::quiet_NaN();
-            pclCloud[i].z = std::numeric_limits<float>::quiet_NaN();
-            pclCloud[i].rgb = 0;*/
         }
     }
 

@@ -28,7 +28,7 @@ public:
   pcl::PointCloud<pcl::PointXYZRGB>::Ptr
     register_depth(
       const cv::Mat &rgbImage, const Eigen::Matrix<float, 4, Eigen::Dynamic> &reconstructedCloud
-      , int width, int height);
+      , int width, int height, const Eigen::Affine3f &transformation);
 };
 
 #endif

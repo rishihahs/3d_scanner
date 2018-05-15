@@ -108,6 +108,12 @@ int main(int argc, char **argv) {
   cloud->is_dense = false;
   cloud->points.resize(cloud->height * cloud->width);
 
+  pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloudOld(new pcl::PointCloud<pcl::PointXYZRGB>());
+  cloud->height = depthI.rows;
+  cloud->width = depthI.cols;
+  cloud->is_dense = false;
+  cloud->points.resize(cloud->height * cloud->width);
+
   pcl::visualization::PCLVisualizer::Ptr visualizer(new pcl::visualization::PCLVisualizer("Cloud Viewer"));
   visualizer->addPointCloud(cloud, "cloud");
   visualizer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "cloud");
@@ -116,8 +122,17 @@ int main(int argc, char **argv) {
   visualizer->setSize(depthI.cols, depthI.rows);
   visualizer->setShowFPS(true);
   visualizer->setCameraPosition(0, 0, 0, 0, -1, 0);
+  //visualizer->setCameraParameters(rgb_intrinsics.leftCols(3), Eigen::Affine3f::Identity().matrix());
 
-  DetectFrame ar_detector(4.4);
+  uint8_t ar_tag_data[5][5] = {{255, 255,   0, 255, 255},
+                              {255, 255,   0, 255, 255},
+                              {255,   0, 255,   0, 255},
+                              {0,   255, 255,   0,   0},
+                              {255,   0, 255, 255, 255}};
+  Mat ar_tag(5, 5, CV_8UC1, &ar_tag_data);
+
+  //DetectFrame ar_detector(20.3);
+  DetectFrame ar_detector(5.4);
 
   // This is our reference start
   Eigen::Affine3f ar_wrt_cam_initial;
@@ -125,7 +140,7 @@ int main(int argc, char **argv) {
 
   while (true) {
     // Throttle
-    //std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    // std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
     int streamIndex;
     rc = openni::OpenNI::waitForAnyStream(streamsD, 1, &streamIndex);
@@ -139,7 +154,7 @@ int main(int argc, char **argv) {
     cvtColor(colorI, colorI, CV_RGB2BGR);
 
     bool success;
-    Eigen::Affine3f ar_wrt_cam = ar_detector.detectARTag(colorI, &success);
+    Eigen::Affine3f ar_wrt_cam = ar_detector.detectARTag(colorI, ar_tag, &success);
 
     if (!success) {
         continue;
@@ -147,31 +162,59 @@ int main(int argc, char **argv) {
 
     if (count == 0) {
         ar_wrt_cam_initial = ar_wrt_cam;
+        visualizer->addCoordinateSystem(0.1, ar_wrt_cam_initial, "ar_tag");
     }
 
+    visualizer->updateCoordinateSystemPose("ar_tag", ar_wrt_cam);
+
     Matrix<float, 4, Dynamic> cloudPoints = recon.reconstruct(depthI);
-    Matrix<float, 4, Dynamic> cloudPointsTFed = ar_wrt_cam.inverse() * ar_wrt_cam_initial * cloudPoints;
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloudNew = recon.register_depth(colorI, cloudPointsTFed, depthW, depthH);
+    Eigen::Affine3f transform = ar_wrt_cam_initial * ar_wrt_cam.inverse();
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloudNew = recon.register_depth(colorI, cloudPoints, depthW, depthH, transform);
     //*cloud += *cloudNew;
-    cloud = cloudNew;
     count++;
 
     visualizer->updatePointCloud(cloud, "cloud");
     visualizer->spinOnce(1);
 
-    Eigen::Vector3f ar_centroid_in_cam_frame = ar_wrt_cam.inverse() * Eigen::Vector3f(0., 0., 0.);
-    Eigen::Vector3f image_ar = rgb_intrinsics * Eigen::Vector4f(ar_centroid_in_cam_frame(0), ar_centroid_in_cam_frame(1), ar_centroid_in_cam_frame(2), 1.);
+    Eigen::Vector4f ar_centroid_in_cam_frame = ar_wrt_cam * Eigen::Vector4f(0., 0., 0., 1.);
+    Eigen::Vector4f ar_xaxis_in_cam_frame = ar_wrt_cam * Eigen::Vector4f(0.1, 0., 0., 1.);
+    Eigen::Vector3f image_ar = rgb_intrinsics * ar_centroid_in_cam_frame;
+    Eigen::Vector3f image_x_ar = rgb_intrinsics * ar_xaxis_in_cam_frame;
 
     int ux = (int) (image_ar(0) / image_ar(2));
     int uy = (int) (image_ar(1) / image_ar(2));
+    int uxp = (int) (image_x_ar(0) / image_x_ar(2));
+    int uyp = (int) (image_x_ar(1) / image_x_ar(2));
 
-    circle(colorI, cv::Point(ux, uy), 50, Scalar(255,255,255), CV_FILLED);
+    //circle(colorI, cv::Point(ux, uy), 20, Scalar(255,255,255), CV_FILLED);
+    arrowedLine(colorI, cv::Point(ux, uy), cv::Point(uxp, uyp), Scalar(60, 255, 0), 5);
+
+    ar_centroid_in_cam_frame = (ar_wrt_cam_initial * ar_wrt_cam.inverse()) * ar_centroid_in_cam_frame;
+    ar_xaxis_in_cam_frame = (ar_wrt_cam_initial * ar_wrt_cam.inverse()) * ar_xaxis_in_cam_frame;
+    image_ar = rgb_intrinsics * ar_centroid_in_cam_frame;
+    image_x_ar = rgb_intrinsics * ar_xaxis_in_cam_frame;
+    ux = (int) (image_ar(0) / image_ar(2));
+    uy = (int) (image_ar(1) / image_ar(2));
+    uxp = (int) (image_x_ar(0) / image_x_ar(2));
+    uyp = (int) (image_x_ar(1) / image_x_ar(2));
+    arrowedLine(colorI, cv::Point(ux, uy), cv::Point(uxp, uyp), Scalar(255, 255, 128), 5);
+    //circle(colorI, cv::Point(ux, uy), 20, Scalar(255,255,128), CV_FILLED);
+
 
     imshow("image", colorI);
     int c = waitKey(1);
     if (c != -1) {
+
+        if (c == 117) { // u for undo
+            *cloud = *cloudOld;
+            cout << "Undone!" << endl;
+        } else {
+            *cloudOld = *cloud;
+            *cloud += *cloudNew;
+            cout << "Saved!" << endl;
+        }
+
         pcl::io::savePLYFileBinary("/home/rishi/Desktop/soylentimgs/cloud.ply", *cloud);
-        cout << "Saved!" << endl;
     }
   }
 

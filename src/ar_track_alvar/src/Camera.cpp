@@ -133,6 +133,21 @@ Camera::Camera(double sx, double sy, double cx, double cy, double xres, double y
 	calib_y_res = yres;
 	x_res = xres;
 	y_res = yres;
+
+    cvmSet(&calib_K, 0, 0, 535.2900990271);
+    cvmSet(&calib_K, 0, 1, 0.000);
+    cvmSet(&calib_K, 0, 2, 320.0);
+    cvmSet(&calib_K, 1, 0, 0.0);
+    cvmSet(&calib_K, 1, 1, 535.2900990271);
+    cvmSet(&calib_K, 1, 2, 240.0000000000);
+    cvmSet(&calib_K, 2, 0, 0.0);
+    cvmSet(&calib_K, 2, 1, 0.0);
+    cvmSet(&calib_K, 2, 2, 1.0);
+
+    cvmSet(&calib_D, 0, 0, 0.0488652171);
+    cvmSet(&calib_D, 1, 0, -0.1555209747);
+    cvmSet(&calib_D, 2, 0, -0.0);
+    cvmSet(&calib_D, 3, 0, 0.0);
 }
 
 
