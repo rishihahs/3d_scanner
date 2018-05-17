@@ -23,7 +23,7 @@ public:
             marker_detector.SetMarkerSize(marker_size, marker_resolution, marker_margin);
         }	
 
-    Eigen::Affine3f detectARTag(const cv::Mat &image, const cv::Mat &ar_tag, bool *success);	
+    Eigen::Affine3f detectARTag(const cv::Mat &image, const cv::Mat &ar_tag, bool *success, std::vector<Eigen::Vector2f> &image_corners, std::vector<Eigen::Vector3f> &model_corners);	
 
 private:
     Camera cam;
