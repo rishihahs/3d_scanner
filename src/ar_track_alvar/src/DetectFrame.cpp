@@ -27,6 +27,12 @@ Eigen::Affine3f DetectFrame::detectARTag(const cv::Mat &image, const cv::Mat &ar
         //Get the pose relative to the camera
         int id = (*(marker_detector.markers))[i].GetId();
 
+        if (id != 10) {
+            std::cout << "WOOOOOOOOOOOOW" << std::endl;
+            std::cout << id << std::endl;
+            exit(1);
+        }
+
         cv::Mat detectedTag = cv::cvarrToMat((*(marker_detector.markers))[i].GetContent());
         bool correctData = std::equal(detectedTag.begin<uchar>(), detectedTag.end<uchar>(), ar_tag.begin<uchar>());
         /*if (!correctData) {

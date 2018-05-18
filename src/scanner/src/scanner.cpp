@@ -32,7 +32,7 @@ using namespace std;
 using namespace Eigen;
 
 int main(int argc, char **argv) {
-  /*openni::Status rc = openni::STATUS_OK;
+  openni::Status rc = openni::STATUS_OK;
 
   openni::Device device;
   openni::VideoStream depth, color, *streamsD[1], *streamsC[1];
@@ -94,9 +94,8 @@ int main(int argc, char **argv) {
   int colorH = colorVideoMode.getResolutionY();
   std::cout << depthW << " " << depthH << std::endl;
 
-  openni::VideoFrameRef depthFR, colorFR;*/
+  openni::VideoFrameRef depthFR, colorFR;
 
-  int colorH = 480, colorW = 640, depthH = 480, depthW = 640;
   Mat colorI(colorH, colorW, CV_8UC3);
   Mat depthI(depthH, depthW, CV_16UC1);
 
@@ -139,8 +138,8 @@ int main(int argc, char **argv) {
                               {255,   0, 255, 255, 255}};
   Mat ar_tag(5, 5, CV_8UC1, &ar_tag_data);
 
-  //DetectFrame ar_detector(20.3);
-  DetectFrame ar_detector(5.4);
+  DetectFrame ar_detector(16.);
+  //DetectFrame ar_detector(5.4);
 
   // This is our reference start
   Eigen::Affine3f ar_wrt_cam_initial;
@@ -148,7 +147,7 @@ int main(int argc, char **argv) {
   vector<Vector3f> cam_image_corners_initial;
   int count = 0;
 
-/*  while (true) {
+  while (true) {
     // Throttle
     // std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
@@ -159,25 +158,9 @@ int main(int argc, char **argv) {
     color.readFrame(&colorFR);
 
     memcpy(colorI.data, colorFR.getData(), colorFR.getDataSize());
-    memcpy(depthI.data, depthFR.getData(), depthFR.getDataSize());*/
+    memcpy(depthI.data, depthFR.getData(), depthFR.getDataSize());
 
-
-  string dir = "/home/rishi/Desktop/soylentstream/";
-  for (int fi = 0; fi <= 643; fi++) {
-    colorI = imread(dir + to_string(fi) + ".png", CV_LOAD_IMAGE_COLOR);
-    string filename = dir + to_string(fi) + ".dat";
-    struct stat stat_buf;
-    int rc = stat(filename.c_str(), &stat_buf);
-    if (rc != 0) {
-        exit(1);
-    }
-    uint8_t depthFile[stat_buf.st_size];
-    std::ifstream input(filename, std::ios::in | std::ios::binary);
-    input.read((char *) &depthFile[0], stat_buf.st_size);
-    input.close();
-    memcpy(depthI.data, (char *) &depthFile[0], stat_buf.st_size);
-
-    //cvtColor(colorI, colorI, CV_RGB2BGR);
+    cvtColor(colorI, colorI, CV_RGB2BGR);
 
     bool success;
     vector<Vector2f> image_corners;
@@ -323,7 +306,9 @@ int main(int argc, char **argv) {
     Eigen::Matrix<float, 4, Dynamic> cloudPoints = recon.reconstruct(depthI);
     Eigen::Affine3f transform = ar_wrt_cam_initial * ar_wrt_cam.inverse();
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloudNew = recon.register_depth(colorI, cloudPoints, depthW, depthH, transform);
-    //*cloud += *cloudNew;
+    if (reserr <= 5e-5) {
+        *cloud += *cloudNew;
+    }
     count++;
 
     visualizer->updatePointCloud(cloud, "cloud");

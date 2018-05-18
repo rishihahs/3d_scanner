@@ -1,4 +1,5 @@
 #include "PtCloudReconstructor.h"
+#include <pcl/filters/statistical_outlier_removal.h>
 
 using namespace cv;
 using namespace Eigen;
@@ -80,7 +81,7 @@ pcl::PointCloud<pcl::PointXYZRGB>::Ptr PointCloudReconstructor::register_depth(c
         float tfz = cloudTransformedData[i*4 + 2] / cloudTransformedData[i*4 + 3];
 
         float dist = tfx*tfx + tfy*tfy + tfz*tfz;
-        if (reconCloudData[i*4 + 2] != 0. && dist <= 4.) {
+        if (reconCloudData[i*4 + 2] != 0. && dist <= 0.8) {
             int x_pixel = (int) (pixelCorrespData[i*3 + 0] / pixelCorrespData[i*3 + 2]);
             int y_pixel = (int) (pixelCorrespData[i*3 + 1] / pixelCorrespData[i*3 + 2]);
             if (
@@ -97,9 +98,23 @@ pcl::PointCloud<pcl::PointXYZRGB>::Ptr PointCloudReconstructor::register_depth(c
                 pclCloud[i].g = color[1];
                 pclCloud[i].r = color[2];
             }
+        } else {
+            pclCloud[i].x = pclCloud[i].y = pclCloud[i].z = std::numeric_limits<float>::quiet_NaN();
+            pclCloud[i].rgb = 0;
         }
     }
 
-    return cloud;
+    std::cout << "Filtering Point Cloud" << std::endl;
+    std::vector<int> indices;
+    pcl::removeNaNFromPointCloud(*cloud, *cloud, indices);
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZRGB>);
+    pcl::StatisticalOutlierRemoval<pcl::PointXYZRGB> sor;
+    sor.setInputCloud(cloud);
+    sor.setMeanK(50);
+    sor.setStddevMulThresh(1.0);
+    sor.filter(*cloud_filtered);
+    std::cout << "=== Finished Filtering Point Cloud" << std::endl;
+
+    return cloud_filtered;
 }
 

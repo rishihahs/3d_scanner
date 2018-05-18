@@ -14,7 +14,7 @@ endif()
 
 find_package (Eigen3 REQUIRED)
 find_package(OpenCV REQUIRED)
-find_package(PCL 1.3 REQUIRED COMPONENTS common io visualization)
+find_package(PCL 1.3 REQUIRED COMPONENTS common io visualization filters)
 
 add_definitions(${PCL_DEFINITIONS})
 
@@ -50,6 +50,7 @@ target_link_libraries(scanner
   ${PCL_COMMON_LIBRARIES}
   ${PCL_IO_LIBRARIES}
   ${PCL_VISUALIZATION_LIBRARIES}
+  ${PCL_FILTERS_LIBRARIES}
 )
 
 set_property(TARGET scanner PROPERTY CXX_STANDARD 11)
