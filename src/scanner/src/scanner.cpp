@@ -138,8 +138,8 @@ int main(int argc, char **argv) {
                               {255,   0, 255, 255, 255}};
   Mat ar_tag(5, 5, CV_8UC1, &ar_tag_data);
 
-  DetectFrame ar_detector(16.);
-  //DetectFrame ar_detector(5.4);
+  DetectFrame ar_detector(7.9);
+  //DetectFrame ar_detector(16.);
 
   // This is our reference start
   Eigen::Affine3f ar_wrt_cam_initial;
@@ -162,16 +162,13 @@ int main(int argc, char **argv) {
 
     cvtColor(colorI, colorI, CV_RGB2BGR);
 
-    bool success;
-    vector<Vector2f> image_corners;
-    vector<Vector3f> model_corners;
-    Eigen::Affine3f ar_wrt_cam = ar_detector.detectARTag(colorI, ar_tag, &success, image_corners, model_corners);
+    vector<alvar::ARTag> ar_tags = ar_detector.detectARTags(colorI);
 
-    if (!success) {
+    if (ar_tags.empty()) {
         continue;
     }
 
-    float sx = rgb_intrinsics(0, 0);
+    /*float sx = rgb_intrinsics(0, 0);
     float sy = rgb_intrinsics(1, 1);
     float x_c = rgb_intrinsics(0, 2);
     float y_c = rgb_intrinsics(1, 2);
@@ -207,36 +204,31 @@ int main(int argc, char **argv) {
         visualizer->addCoordinateSystem(0.1, ar_wrt_cam_initial, "ar_tag");
     }
 
-    /*Eigen::Matrix<float, 3, 3> rgb_intrinsics_;
-    rgb_intrinsics_ << 535.2900990271, 0.0000000000, 320.0000000000, 0, 535.2900990271, 240.0000000000,  0, 0, 1;
-    Eigen::Affine3f t = ar_wrt_cam * ar_wrt_cam_initial.inverse() * ar_wrt_cam;
-    Eigen::Vector3f imgpoint = (rgb_intrinsics_ * t * model_corners[0]);
-    Eigen::Vector3f imgpoint2 = (rgb_intrinsics_ * t * model_corners[1]);
-    Eigen::Vector3f imgpoint3 = (rgb_intrinsics_ * t * model_corners[2]);
-    imgpoint(0) /= imgpoint(2);
-    imgpoint(1) /= imgpoint(2);
-    imgpoint(2) /= imgpoint(2);
-    imgpoint2(0) /= imgpoint2(2);
-    imgpoint2(1) /= imgpoint2(2);
-    imgpoint2(2) /= imgpoint2(2);
-    imgpoint3(0) /= imgpoint3(2);
-    imgpoint3(1) /= imgpoint3(2);
-    imgpoint3(2) /= imgpoint3(2);
+//    Eigen::Matrix<float, 3, 3> rgb_intrinsics_;
+//    rgb_intrinsics_ << 535.2900990271, 0.0000000000, 320.0000000000, 0, 535.2900990271, 240.0000000000,  0, 0, 1;
+//    Eigen::Affine3f t = ar_wrt_cam * ar_wrt_cam_initial.inverse() * ar_wrt_cam;
+//    Eigen::Vector3f imgpoint = (rgb_intrinsics_ * t * model_corners[0]);
+//    Eigen::Vector3f imgpoint2 = (rgb_intrinsics_ * t * model_corners[1]);
+//    Eigen::Vector3f imgpoint3 = (rgb_intrinsics_ * t * model_corners[2]);
+//    imgpoint(0) /= imgpoint(2);
+//    imgpoint(1) /= imgpoint(2);
+//    imgpoint(2) /= imgpoint(2);
+//    imgpoint2(0) /= imgpoint2(2);
+//    imgpoint2(1) /= imgpoint2(2);
+//    imgpoint2(2) /= imgpoint2(2);
+//    imgpoint3(0) /= imgpoint3(2);
+//    imgpoint3(1) /= imgpoint3(2);
+//    imgpoint3(2) /= imgpoint3(2);
+//
+//    std::cout << "CORNER: " << image_corners_initial[0](0) << " " << image_corners_initial[0](1) << std::endl;
+//    std::cout << "CORNER2: " << image_corners_initial[1](0) << " " << image_corners_initial[1](1) << std::endl;
+//    std::cout << "CORNER3: " << image_corners_initial[2](0) << " " << image_corners_initial[2](1) << std::endl;
+//    std::cout << "IMGPOINT: " << imgpoint.transpose() << std::endl;
+//    std::cout << "IMGPOINT2: " << imgpoint2.transpose() << std::endl;
+//    std::cout << "IMGPOINT3: " << imgpoint3.transpose() << std::endl;
+//    std::cout << "===========" << std::endl;
 
-    std::cout << "CORNER: " << image_corners_initial[0](0) << " " << image_corners_initial[0](1) << std::endl;
-    std::cout << "CORNER2: " << image_corners_initial[1](0) << " " << image_corners_initial[1](1) << std::endl;
-    std::cout << "CORNER3: " << image_corners_initial[2](0) << " " << image_corners_initial[2](1) << std::endl;
-    std::cout << "IMGPOINT: " << imgpoint.transpose() << std::endl;
-    std::cout << "IMGPOINT2: " << imgpoint2.transpose() << std::endl;
-    std::cout << "IMGPOINT3: " << imgpoint3.transpose() << std::endl;
-    std::cout << "===========" << std::endl;*/
-    /*for (int i = 0; i < cam_image_corners.size(); i++) {
-        Vector3f p1 = cam_image_corners_initial[i];
-        Vector3f p2 = ar_wrt_cam_initial * ar_wrt_cam.inverse() * cam_image_corners[i];
-        std::cout << (p1 - p2).norm() << std::endl;
-    }*/
-
-    /* ============================================= */
+    // =============================================
     Affine3f toOptimize = ar_wrt_cam.inverse();
     Quaternionf rotation(toOptimize.linear());
     Vector3f translation = toOptimize.translation();
@@ -278,7 +270,7 @@ int main(int argc, char **argv) {
 
     Eigen::Affine3d optimized = translation_opt * rotation_opt;
     ar_wrt_cam = (optimized).cast<float>().inverse();
-    /* ============================================= */
+    // =============================================
 
     float reserr = 0;
     for (int i = 0; i < cam_image_corners.size(); i++) {
@@ -286,17 +278,6 @@ int main(int argc, char **argv) {
         Vector3f p2 = ar_wrt_cam_initial * ar_wrt_cam.inverse() * cam_image_corners[i];
         //std::cout << "Dist: " << (p1 - p2).norm() << std::endl;
         reserr += (p1 - p2).squaredNorm();
-
-        /*RigidCostFunctor cost(ar_wrt_cam_initial.matrix(), cam_image_corners_initial[i], cam_image_corners[i]);
-        Affine3f toOptimize = ar_wrt_cam.inverse();
-        Quaternionf rotation(toOptimize.linear());
-        Vector3f translation = toOptimize.translation();
-
-        float se3data[7] = {rotation.x(), rotation.y(), rotation.z(), rotation.w(), translation(0), translation(1), translation(2)};
-        float residuals[3];
-        cost.test<float>((float *) &se3data[0], (float *) &residuals[0]);
-        std::cout << "cost: " << sqrt(residuals[0]*residuals[0] + residuals[1]*residuals[1] + residuals[2]*residuals[2]) << std::endl;*/
-
     }
     reserr /= 2.;
     std::cout << "Loss: " << reserr << std::endl;
@@ -353,7 +334,7 @@ int main(int argc, char **argv) {
         }
 
         pcl::io::savePLYFileBinary("/home/rishi/Desktop/soylentimgs/cloud.ply", *cloud);
-    }
+    }*/
   }
 
   return 0;
