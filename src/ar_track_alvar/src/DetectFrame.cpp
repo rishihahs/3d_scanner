@@ -108,14 +108,19 @@ vector<ARTag> DetectFrame::detectARTags(const cv::Mat &image) {
         ar_tags.push_back(tag);
     }
 
-    // TODO: CHange baCK!!!
-    //if (ar_tags.size() > 1) {
-    if (ar_tags.size() > 0) {
+    if (ar_tags.size() > 1) {
         if (leader_id < 0) {
             leader_id = ar_tags[0].id;
         }
 
         optimizeRT(ar_tags);
+
+        /*Eigen::Affine3f candidate = ar_tags[0].pose * tfToLeader[ar_tags[0].id].inverse() * tfToLeader[ar_tags[1].id] * ar_tags[0].pose.inverse();
+        Eigen::Affine3f real = ar_tags[1].pose * tfToLeader[ar_tags[1].id].inverse() * tfToLeader[ar_tags[0].id] * ar_tags[0].pose.inverse();
+        std::cout << "Comparison" << std::endl;
+        std::cout << (candidate.matrix() - real.matrix()) << std::endl;
+        std::cout << (candidate.matrix() - real.matrix()).norm() << std::endl;
+        std::cout << "==================" << std::endl;*/
     }
 
     return ar_tags;
@@ -166,11 +171,6 @@ Eigen::Affine3f DetectFrame::optimizeRT(vector<ARTag> &ar_tags) {
 
         for (int i = 0; i < 4; i++) {
           // Ownership is taken of the following, so no memory leak is happening
-          Eigen::Vector3f world_corner = tag.model_corners[i];
-          std::cout << "Real: " << tag.image_corners[i].transpose() << std::endl;
-          Eigen::Vector3f res = intrinsic_matrix * (transform * (rotation * world_corner + translation));
-          res /= res(2);
-          std::cout << "Initial: " << res.transpose() << std::endl;
           DynamicAutoDiffCostFunction<ARTagCostFunctor> *cost =
               new DynamicAutoDiffCostFunction<ARTagCostFunctor>(new ARTagCostFunctor(
                   intrinsic_matrix, transform.matrix(), count*7, tag.image_corners[i],
@@ -227,13 +227,6 @@ Eigen::Affine3f DetectFrame::optimizeRT(vector<ARTag> &ar_tags) {
         } else if (leader_id != cur_leader) {
             // We want leader_pose * tfToLeader[cur_leader].inverse() * tfToLeader[tag.id];
             tag.pose = leader_pose * tfToLeader[cur_leader].inverse() * tfToLeader[tag.id];
-        }
-
-        for (int i = 0; i < 4; i++) {
-          Eigen::Vector3f world_corner = tag.model_corners[i];
-          Eigen::Vector3f res = intrinsic_matrix * tag.pose * world_corner;
-          res /= res(2);
-          std::cout << "Final: " << res.transpose() << std::endl;
         }
     }
 }

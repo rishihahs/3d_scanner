@@ -19,11 +19,14 @@ struct ARTag {
     Eigen::Affine3f pose;
     std::vector<Eigen::Vector2f> image_corners;
     std::vector<Eigen::Vector3f> model_corners;
+    std::vector<Eigen::Vector3f> camera_corners; // Corners in the camera frame
 };
 
 class ALVAR_EXPORT DetectFrame {
 
 public:
+    std::unordered_map<int, Eigen::Affine3f> tfToLeader;
+
     DetectFrame(double marker_size_) :
         marker_size(marker_size_),
         // Xtion intrinsics 535.2900990271, 0.0000000000, 320.0000000000, 0, 0, 535.2900990271, 240.0000000000, 0, 0, 0, 1, 0
@@ -42,8 +45,6 @@ private:
     MarkerDetector<MarkerData> marker_detector;
     std::vector<int> marker_ids = {10, 7, 13, 220};
     int leader_id = -1;
-
-    std::unordered_map<int, Eigen::Affine3f> tfToLeader;
 
     double marker_size;
     double max_new_marker_error = 0.08;

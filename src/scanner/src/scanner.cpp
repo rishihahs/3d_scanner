@@ -142,9 +142,7 @@ int main(int argc, char **argv) {
   //DetectFrame ar_detector(16.);
 
   // This is our reference start
-  Eigen::Affine3f ar_wrt_cam_initial;
-  vector<Vector2f> image_corners_initial;
-  vector<Vector3f> cam_image_corners_initial;
+  vector<alvar::ARTag> initial_tags;
   int count = 0;
 
   while (true) {
@@ -168,40 +166,37 @@ int main(int argc, char **argv) {
         continue;
     }
 
-    /*float sx = rgb_intrinsics(0, 0);
+    float sx = rgb_intrinsics(0, 0);
     float sy = rgb_intrinsics(1, 1);
     float x_c = rgb_intrinsics(0, 2);
     float y_c = rgb_intrinsics(1, 2);
 
-    vector<Vector3f> cam_image_corners;
-    for (auto corn : image_corners) {
-        float x = (corn(0) - x_c) * (1.0 / sx);
-        float y = (corn(1) - y_c) * (1.0 / sy);
-        float z = 1.;
-        Vector3f pt(x, y, z);
-        pt = extrinsics * pt;
-        pt(0) /= pt(2);
-        pt(1) /= pt(2);
-        pt(2) /= pt(2);
-        Vector3f p_in_irimg = ir_intrinsics * pt;
-        p_in_irimg(0) /= p_in_irimg(2);
-        p_in_irimg(1) /= p_in_irimg(2);
-        p_in_irimg(2) /= p_in_irimg(2);
-        pt *= depthI.at<uint16_t>((int) p_in_irimg(1), (int) p_in_irimg(0)) / 1000.f;
-        pt = extrinsics.inverse() * pt;
-        cam_image_corners.push_back(pt);
+    for (auto &tag : ar_tags) {
+        vector<Vector3f> cam_image_corners;
+        for (const auto &corn : tag.image_corners) {
+            float x = (corn(0) - x_c) * (1.0 / sx);
+            float y = (corn(1) - y_c) * (1.0 / sy);
+            float z = 1.;
+            Vector3f pt(x, y, z);
+            pt = extrinsics * pt;
+            pt(0) /= pt(2);
+            pt(1) /= pt(2);
+            pt(2) /= pt(2);
+            Vector3f p_in_irimg = ir_intrinsics * pt;
+            p_in_irimg(0) /= p_in_irimg(2);
+            p_in_irimg(1) /= p_in_irimg(2);
+            p_in_irimg(2) /= p_in_irimg(2);
+            pt *= depthI.at<uint16_t>((int) p_in_irimg(1), (int) p_in_irimg(0)) / 1000.f;
+            pt = extrinsics.inverse() * pt;
+            cam_image_corners.push_back(pt);
+        }
+
+        tag.camera_corners = cam_image_corners;
     }
 
     if (count == 0) {
-        ar_wrt_cam_initial = ar_wrt_cam;
-        image_corners_initial.clear();
-        for (auto corn : image_corners) {
-            image_corners_initial.push_back(corn);
-        }
-        for (auto corn : cam_image_corners) {
-            cam_image_corners_initial.push_back(corn);
-        }
-        visualizer->addCoordinateSystem(0.1, ar_wrt_cam_initial, "ar_tag");
+        initial_tags = ar_tags;
+        //visualizer->addCoordinateSystem(0.1, ar_wrt_cam_initial, "ar_tag");
     }
 
 //    Eigen::Matrix<float, 3, 3> rgb_intrinsics_;
@@ -229,25 +224,37 @@ int main(int argc, char **argv) {
 //    std::cout << "===========" << std::endl;
 
     // =============================================
-    Affine3f toOptimize = ar_wrt_cam.inverse();
+    // Optimize between initial_tags[0] and ar_tags[0] using rigid motions between ar tags on the board when necessary
+    Affine3f toOptimize = ar_tags[0].pose.inverse();
     Quaternionf rotation(toOptimize.linear());
     Vector3f translation = toOptimize.translation();
 
-    //Eigen::VectorXd se3data(7);
-    //se3data << rotation.x(), rotation.y(), rotation.z(), rotation.w(),
-    //           translation(0), translation(1),
-    //           translation(2);
     double se3data[7] = {rotation.x(), rotation.y(), rotation.z(), rotation.w(), translation(0), translation(1), translation(2)};
 
     Problem problem;
 
-    for (int i = 0; i < 4; i++) {
-      // Ownership is taken of the following, so no memory leak is happening
-      CostFunction *cost =
-          new AutoDiffCostFunction<RigidCostFunctor, 3, 7>(new RigidCostFunctor(
-              ar_wrt_cam_initial.matrix(), cam_image_corners_initial[i],
-              cam_image_corners[i]));
-      problem.AddResidualBlock(cost, NULL, &se3data[0]);
+    //int tags_to_compare = min(initial_tags.size(), ar_tags.size()); // We want to compare all corners
+    int tags_to_compare = 1;
+    for (int t = 0; t < tags_to_compare; t++) {
+        // We want initial_tags[t] * ar_tags[initial_id].inverse()
+        // = initial_tags[t] * tfToLeader[initial_t_id].inverse() * tfToLeader[0_id] * ar_tags[0].inverse()
+        // So, we want to left compose with:
+        Eigen::Affine3f transform = initial_tags[t].pose *
+                                    ar_detector.tfToLeader[initial_tags[t].id].inverse() *
+                                    ar_detector.tfToLeader[ar_tags[0].id];
+
+        // in_image[t] -> affine model space -> camera
+        // = ar_tags[0].pose * tfToLeader[ar_0_id].inverse() * tfToLeader[ar_tags_t_id] * ar_tags[t].pose^-1 * camera_corners[t]
+
+        for (int i = 0; i < 4; i++) {
+            Eigen::Vector3f cam_corns = ar_tags[0].pose * ar_detector.tfToLeader[ar_tags[0].id].inverse() * ar_detector.tfToLeader[ar_tags[t].id] * ar_tags[t].pose.inverse() * ar_tags[t].camera_corners[i];
+            // Ownership is taken of the following, so no memory leak is happening
+            CostFunction *cost =
+                new AutoDiffCostFunction<RigidCostFunctor, 3, 7>(new RigidCostFunctor(
+                    transform.matrix(), initial_tags[t].camera_corners[i],
+                    cam_corns));
+            problem.AddResidualBlock(cost, NULL, &se3data[0]);
+        }
     }
 
     // We are argmining w.r.t an SE(3) element
@@ -269,22 +276,24 @@ int main(int argc, char **argv) {
     Eigen::Translation3d translation_opt(se3data[4], se3data[5], se3data[6]);
 
     Eigen::Affine3d optimized = translation_opt * rotation_opt;
-    ar_wrt_cam = (optimized).cast<float>().inverse();
+    ar_tags[0].pose = (optimized).cast<float>().inverse();
     // =============================================
 
     float reserr = 0;
-    for (int i = 0; i < cam_image_corners.size(); i++) {
-        Vector3f p1 = cam_image_corners_initial[i];
-        Vector3f p2 = ar_wrt_cam_initial * ar_wrt_cam.inverse() * cam_image_corners[i];
+    for (int i = 0; i < initial_tags[0].camera_corners.size(); i++) {
+        Vector3f p1 = initial_tags[0].camera_corners[i];
+        Vector3f p2 = initial_tags[0].pose * ar_tags[0].pose.inverse() * ar_tags[0].camera_corners[i];
         //std::cout << "Dist: " << (p1 - p2).norm() << std::endl;
         reserr += (p1 - p2).squaredNorm();
     }
     reserr /= 2.;
     std::cout << "Loss: " << reserr << std::endl;
 
-    visualizer->updateCoordinateSystemPose("ar_tag", ar_wrt_cam);
+    //visualizer->updateCoordinateSystemPose("ar_tag", ar_wrt_cam);
 
     Eigen::Matrix<float, 4, Dynamic> cloudPoints = recon.reconstruct(depthI);
+    Eigen::Affine3f ar_wrt_cam_initial = initial_tags[0].pose;
+    Eigen::Affine3f ar_wrt_cam = ar_tags[0].pose;
     Eigen::Affine3f transform = ar_wrt_cam_initial * ar_wrt_cam.inverse();
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloudNew = recon.register_depth(colorI, cloudPoints, depthW, depthH, transform);
     if (reserr <= 5e-5) {
@@ -334,7 +343,7 @@ int main(int argc, char **argv) {
         }
 
         pcl::io::savePLYFileBinary("/home/rishi/Desktop/soylentimgs/cloud.ply", *cloud);
-    }*/
+    }
   }
 
   return 0;

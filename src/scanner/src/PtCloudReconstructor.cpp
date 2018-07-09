@@ -107,14 +107,15 @@ pcl::PointCloud<pcl::PointXYZRGB>::Ptr PointCloudReconstructor::register_depth(c
     std::cout << "Filtering Point Cloud" << std::endl;
     std::vector<int> indices;
     pcl::removeNaNFromPointCloud(*cloud, *cloud, indices);
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZRGB>);
-    pcl::StatisticalOutlierRemoval<pcl::PointXYZRGB> sor;
-    sor.setInputCloud(cloud);
-    sor.setMeanK(50);
-    sor.setStddevMulThresh(1.0);
-    sor.filter(*cloud_filtered);
+    //pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZRGB>);
+    //pcl::StatisticalOutlierRemoval<pcl::PointXYZRGB> sor;
+    //sor.setInputCloud(cloud);
+    //sor.setMeanK(50);
+    //sor.setStddevMulThresh(1.0);
+    //sor.filter(*cloud_filtered);
     std::cout << "=== Finished Filtering Point Cloud" << std::endl;
 
-    return cloud_filtered;
+    //return cloud_filtered;
+    return cloud;
 }
 
